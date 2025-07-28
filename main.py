@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from moviepy import ImageSequenceClip, AudioFileClip, ImageClip
 from pydantic import BaseModel
 from typing import List, Optional
 import os
@@ -26,13 +25,44 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import bcrypt
 
-# Runware imports
+# MoviePy imports - FIXED for version 2.0
 try:
-    from runware import Runware, IImageInference
+    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+    from moviepy.audio.io.AudioFileClip import AudioFileClip
+    from moviepy.video.VideoClip import ImageClip
+    MOVIEPY_AVAILABLE = True
+    print("✅ MoviePy available")
+except ImportError as e:
+    MOVIEPY_AVAILABLE = False
+    print(f"⚠️ MoviePy not available - video processing disabled: {e}")
+
+# Runware imports - FIXED for version 0.4.16
+try:
+    from runware import Runware
+    from runware.types import IImageInference  # Updated import path
     RUNWARE_AVAILABLE = True
-except ImportError:
+    print("✅ Runware available")
+except ImportError as e:
     RUNWARE_AVAILABLE = False
-    print("⚠️ Runware not available - AI image generation disabled")
+    print(f"⚠️ Runware not available - AI image generation disabled: {e}")
+
+# Gemini imports
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+    print("✅ Gemini available")
+except ImportError as e:
+    GEMINI_AVAILABLE = False
+    print(f"⚠️ Gemini not available - prompt enhancement disabled: {e}")
+
+# Audio processing imports
+try:
+    import librosa
+    LIBROSA_AVAILABLE = True
+    print("✅ Librosa available")
+except ImportError as e:
+    LIBROSA_AVAILABLE = False
+    print(f"⚠️ Librosa not available - beat sync disabled: {e}")
 
 app = FastAPI(title="AI Video Maker Pro")
 

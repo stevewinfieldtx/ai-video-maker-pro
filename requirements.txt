@@ -1,5 +1,6 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+gunicorn==21.2.0
 python-multipart==0.0.6
 jinja2==3.1.2
 python-jose[cryptography]==3.3.0
@@ -7,9 +8,11 @@ passlib[bcrypt]==1.7.4
 sqlalchemy==2.0.23
 stripe==7.8.0
 aiohttp==3.9.1
-moviepy==1.0.3
-runware==1.4.0
+moviepy==2.2.1
+runware==0.4.16
 librosa==0.10.1
 Pillow==10.1.0
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 psycopg2-binary==2.9.9
+google-generativeai==0.8.3
+PyJWT==2.8.0
