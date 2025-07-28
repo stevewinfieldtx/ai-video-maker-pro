@@ -28,7 +28,8 @@ import bcrypt
 
 # Runware imports
 try:
-    from runware import Runware, IImageInference
+    from runware import Runware
+    from runware.types import IImageInference
     RUNWARE_AVAILABLE = True
 except ImportError:
     RUNWARE_AVAILABLE = False
