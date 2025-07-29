@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Video Maker Pro - Create Stunning Videos with AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://js.stripe.com/v3/"></script>
 </head>
 <body class="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 min-h-screen">
     <!-- Navigation -->
@@ -17,7 +16,7 @@
                 </div>
                 <div class="space-x-4">
                     <button onclick="showLogin()" class="text-white hover:text-blue-300 transition-colors">Login</button>
-                    <button onclick="showRegister()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">Sign Up</button>
+                    <button onclick="alert('Sign Up button clicked'); showRegister()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">Sign Up</button>
                 </div>
             </div>
         </div>
@@ -213,7 +212,7 @@
     </div>
 
     <script>
-        const stripe = Stripe('{{ stripe_publishable_key }}');
+        console.log('JavaScript loaded and executing');
         
         // Modal functions
         function showLogin() {
@@ -258,7 +257,9 @@
         }
         
         async function handleRegister(name, email, password) {
+            console.log('handleRegister called with:', name, email);
             try {
+                console.log('Attempting to fetch /api/register');
                 const response = await fetch('/api/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -268,6 +269,7 @@
                         password 
                     })
                 });
+                console.log('Fetch response status:', response.status);
                 
                 if (response.ok) {
                     const data = await response.json();
@@ -275,9 +277,11 @@
                     window.location.href = '/dashboard';
                 } else {
                     const error = await response.json();
+                    console.log('Registration error:', error);
                     alert(error.detail || 'Registration failed');
                 }
             } catch (error) {
+                console.log('Registration catch error:', error);
                 alert('Registration failed. Please try again.');
             }
         }
@@ -322,6 +326,7 @@
         
         document.getElementById('registerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('Register form submitted');
             const name = document.getElementById('registerName').value;
             const email = document.getElementById('registerEmail').value;
             const password = document.getElementById('registerPassword').value;

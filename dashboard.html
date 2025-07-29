@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Video Maker Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+    <nav class="bg-white shadow-md p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-indigo-600">AI Video Maker Pro</h1>
+            <div>
+                <span id="video-credits" class="mr-4">Video Credits: 0</span>
+                <button onclick="upgrade()" class="bg-indigo-500 text-white px-4 py-2 rounded mr-2">Upgrade</button>
+                <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto mt-8">
+        <section class="mb-8">
+            <h2 class="text-xl font-bold mb-4">Quick Start</h2>
+            <button onclick="document.getElementById('video-modal').classList.remove('hidden')" class="bg-green-500 text-white px-6 py-3 rounded">Create New Video</button>
+        </section>
+
+        <section>
+            <h2 class="text-xl font-bold mb-4">Recent Videos</h2>
+            <div id="recent-videos" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+        </section>
+    </main>
+
+    <!-- Video Creation Modal -->
+    <div id="video-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+            <h3 class="text-lg font-bold mb-4">Create New Video</h3>
+            <form onsubmit="createVideo(event)">
+                <input type="text" id="prompt" placeholder="Enter video prompt" class="w-full p-2 mb-4 border rounded">
+                <input type="number" id="num_images" placeholder="Number of images" value="10" class="w-full p-2 mb-4 border rounded">
+                <input type="number" id="seconds_per_image" placeholder="Seconds per image" value="3" class="w-full p-2 mb-4 border rounded">
+                <div class="flex justify-end">
+                    <button type="button" onclick="document.getElementById('video-modal').classList.add('hidden')" class="mr-2 text-gray-500">Cancel</button>
+                    <button type="submit" class="bg-indigo-500 text-white px-4 py-2 rounded">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            window.location.href = '/';
+        }
+
+        function upgrade() {
+            alert('Upgrade functionality coming soon!');
+        }
+
+        async function createVideo(event) {
+            event.preventDefault();
+            const prompt = document.getElementById('prompt').value;
+            const num_images = parseInt(document.getElementById('num_images').value);
+            const seconds_per_image = parseInt(document.getElementById('seconds_per_image').value);
+
+            try {
+                const response = await fetch('/api/create_video', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, num_images, seconds_per_image })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to start video creation');
+                }
+
+                const data = await response.json();
+                alert(`Video creation started! Job ID: ${data.job_id}`);
+                document.getElementById('video-modal').classList.add('hidden');
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Fetch user data and recent videos (placeholder)
+        async function initDashboard() {
+            // TODO: Fetch actual data
+            document.getElementById('video-credits').textContent = 'Video Credits: 5';
+            // Add recent videos placeholders
+            const recentVideos = document.getElementById('recent-videos');
+            for (let i = 1; i <= 3; i++) {
+                recentVideos.innerHTML += `<div class="bg-white p-4 rounded shadow">Video ${i} <br><small>Created: 2023-10-${i}</small></div>`;
+            }
+        }
+
+        initDashboard();
+    </script>
+</body>
+</html>

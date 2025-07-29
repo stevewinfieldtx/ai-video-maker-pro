@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # main.py - Complete AI Video Maker with PayPal Integration (NO STRIPE!)
 from fastapi import FastAPI, HTTPException, Request, Depends, Form, File, UploadFile
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
@@ -19,6 +21,7 @@ import hashlib
 import jwt
 from datetime import datetime, timedelta
 import sqlalchemy
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import create_engine, Column, String, Integer, DateTime, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -123,6 +126,7 @@ class User(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
+    name = Column(String)
     hashed_password = Column(String)
     video_credits = Column(Integer, default=0)  # NO FREE CREDITS!
     paypal_customer_id = Column(String, nullable=True)
@@ -130,7 +134,11 @@ class User(Base):
     is_active = Column(Boolean, default=True)
 
 # Create tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created successfully")
+except Exception as e:
+    print(f"💥 Error creating database tables: {str(e)}")
 
 # Pydantic Models
 class VideoRequest(BaseModel):
@@ -575,7 +583,7 @@ Format: ["prompt1", "prompt2", ...]
         return prompts
 
 # Video Processing Functions
-def create_static_clip(image_path: str, duration: float, size=(1152, 1536)) -> ImageClip:
+def create_static_clip(image_path: str, duration: float, size=(1152, 1536)) -> 'ImageClip':
     """Create a static video clip from an image"""
     if MOVIEPY_AVAILABLE:
         clip = ImageClip(image_path).set_duration(duration)
@@ -780,6 +788,10 @@ async def continue_video_processing(job_id: str, request: VideoRequest, audio_pa
         jobs[job_id].message = "Video processing failed"
 
 # API Routes
+@app.get("/@vite/client")
+async def vite_client():
+    return Response(content="", media_type="application/javascript")
+
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     return templates.TemplateResponse("landing.html", {
@@ -797,10 +809,12 @@ async def dashboard(request: Request, current_user: dict = Depends(get_current_u
 
 @app.post("/api/register")
 async def register(request: Request):
+    print("Received registration request")
     try:
         data = await request.json()
         email = data.get("email")
         password = data.get("password")
+        print(f"Processing registration for: {email}")
         
         if not email or not password:
             raise HTTPException(status_code=400, detail="Email and password required")
@@ -818,12 +832,22 @@ async def register(request: Request):
             hashed_password = get_password_hash(password)
             user = User(
                 email=email,
+                name=data.get("full_name"),
                 hashed_password=hashed_password,
                 video_credits=0
             )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+            print("🔍 About to add user to session")
+            try:
+                db.add(user)
+                print("🔍 Added user to session, about to commit")
+                db.commit()
+                print("🔍 Committed, about to refresh")
+                db.refresh(user)
+                print("🔍 Refreshed user")
+            except IntegrityError as ie:
+                db.rollback()
+                print(f"💥 Integrity error during user creation: {str(ie)}")
+                raise HTTPException(status_code=400, detail="Email already registered")
             
             print(f"✅ User created successfully: {user.id}")
             
@@ -832,7 +856,8 @@ async def register(request: Request):
             
             response = JSONResponse({
                 "message": "Registration successful!", 
-                "credits": user.video_credits
+                "credits": user.video_credits,
+                "access_token": access_token
             })
             response.set_cookie(
                 key="access_token",
@@ -844,7 +869,9 @@ async def register(request: Request):
             return response
             
         except Exception as db_error:
-            print(f"💥 Database error: {db_error}")
+            print(f"💥 Database error: type={type(db_error).__name__}, message={str(db_error)}, repr={repr(db_error)}")
+            import traceback
+            traceback.print_exc()
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
         finally:
@@ -874,7 +901,10 @@ async def login(request: Request):
             
             access_token = create_access_token({"user_id": user.id})
             
-            response = JSONResponse({"message": "Login successful"})
+            response = JSONResponse({
+                "message": "Login successful",
+                "access_token": access_token
+            })
             response.set_cookie(
                 key="access_token",
                 value=access_token,
@@ -894,6 +924,47 @@ async def login(request: Request):
 @app.post("/api/logout")
 async def logout():
     response = JSONResponse({"message": "Logged out successfully"})
+
+@app.post("/api/create_video")
+async def create_video(request: Request, current_user: dict = Depends(get_current_user)):
+    try:
+        data = await request.json()
+        prompt = data.get("prompt")
+        num_images = data.get("num_images", 10)
+        seconds_per_image = data.get("seconds_per_image", 3)
+
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Prompt is required")
+
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == current_user["user_id"]).first()
+            if not user or user.video_credits <= 0:
+                raise HTTPException(status_code=402, detail="Insufficient video credits")
+
+            # Create job
+            job_id = str(uuid.uuid4())
+            job = VideoJob(
+                id=job_id,
+                user_id=user.id,
+                status="pending",
+                progress=0,
+                message="Initializing...",
+                created_at=datetime.now()
+            )
+            jobs[job_id] = job
+
+            # Start processing asynchronously
+            asyncio.create_task(process_video_job(job_id, prompt, num_images, seconds_per_image))
+
+            return {"job_id": job_id, "message": "Video creation started"}
+        finally:
+            db.close()
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Video creation error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
     response.delete_cookie("access_token")
     return response
 
@@ -1270,24 +1341,7 @@ print(f"💰 PayPal Client ID: {PAYPAL_CLIENT_ID[:12] if PAYPAL_CLIENT_ID else '
 if GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_API_KEY != "AIzaSyBX4Q3dZXzdHIoHDSHX6i5Qhp8jS01wUds":
     genai.configure(api_key=GEMINI_API_KEY)
 
-# Database Setup
-Base = declarative_base()
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-class User(Base):
-    __tablename__ = "users"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    video_credits = Column(Integer, default=0)  # NO FREE CREDITS!
-    paypal_customer_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    is_active = Column(Boolean, default=True)
-
-# Create tables
-Base.metadata.create_all(bind=engine)
 
 # Pydantic Models
 class VideoRequest(BaseModel):
@@ -1952,85 +2006,21 @@ async def dashboard(request: Request, current_user: dict = Depends(get_current_u
         "paypal_client_id": PAYPAL_CLIENT_ID
     })
 
-@app.post("/api/register")
-async def register(request: Request):
-    try:
-        data = await request.json()
-        email = data.get("email")
-        password = data.get("password")
-        
-        if not email or not password:
-            raise HTTPException(status_code=400, detail="Email and password required")
-        
-        print(f"🔧 Registration attempt for: {email}")
-        
-        # Check if user exists
-        db = SessionLocal()
-        try:
-            existing_user = db.query(User).filter(User.email == email).first()
-            if existing_user:
-                raise HTTPException(status_code=400, detail="Email already registered")
-            
-            # Create user - SUPER SIMPLE, NO EXTERNAL CALLS
-            hashed_password = get_password_hash(password)
-            user = User(
-                email=email,
-                hashed_password=hashed_password,
-                video_credits=0
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            
-            print(f"✅ User created successfully: {user.id}")
-            
-            # Create access token
-            access_token = create_access_token({"user_id": user.id})
-            
-            response = JSONResponse({
-                "message": "Registration successful!", 
-                "credits": user.video_credits
-            })
-            response.set_cookie(
-                key="access_token",
-                value=access_token,
-                httponly=True,
-                max_age=86400,
-                samesite="lax"
-            )
-            return response
-            
-        except Exception as db_error:
-            print(f"💥 Database error: {db_error}")
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
-        finally:
-            db.close()
-            
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        print(f"💥 Registration error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
-
 @app.post("/api/login")
 async def login(request: Request):
     try:
         data = await request.json()
         email = data.get("email")
         password = data.get("password")
-        
+
         db = SessionLocal()
         try:
             user = db.query(User).filter(User.email == email).first()
             if not user or not verify_password(password, user.hashed_password):
                 raise HTTPException(status_code=401, detail="Invalid credentials")
-            
+
             access_token = create_access_token({"user_id": user.id})
-            
+
             response = JSONResponse({"message": "Login successful"})
             response.set_cookie(
                 key="access_token",
@@ -2040,10 +2030,8 @@ async def login(request: Request):
                 samesite="lax"
             )
             return response
-            
         finally:
             db.close()
-            
     except Exception as e:
         print(f"Login error: {e}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
