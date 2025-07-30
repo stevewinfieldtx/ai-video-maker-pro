@@ -17,7 +17,10 @@ python-dotenv==1.0.1
 
 PyJWT==2.8.0
 bcrypt==4.1.2
+<<<<<<< HEAD
 google-generativeai==0.3.2
 librosa==0.10.1
 moviepy==1.0.3
 runware==0.4.16
+=======
+>>>>>>> 20a1f994e9f89d2269a55d51fe55ce0e67165588

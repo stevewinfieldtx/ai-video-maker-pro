@@ -12,7 +12,10 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center py-4">
                 <h1 class="text-2xl font-bold">🎬 AI Video Maker Pro - Dashboard</h1>
-                <button onclick="logout()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">Logout</button>
+                <div class="flex items-center space-x-4">
+                    <span id="video-credits" class="text-lg font-semibold">Credits: {{ video_credits }}</span>
+                    <button onclick="logout()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors">Logout</button>
+                </div>
             </div>
         </div>
     </nav>
@@ -34,14 +37,14 @@
             <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
                 <h3 class="text-2xl font-bold mb-4">Quick Start</h3>
                 <p class="text-gray-300 mb-6">Start creating your AI video now!</p>
-                <button onclick="createVideo()" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 rounded-lg font-semibold transition-colors">Create New Video</button>
+                <button onclick="showVideoModal()" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 rounded-lg font-semibold transition-colors">Create New Video</button>
             </div>
         </div>
 
         <!-- Recent Videos -->
         <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
             <h3 class="text-2xl font-bold mb-6">Your Recent Videos</h3>
-            <div class="grid md:grid-cols-3 gap-6">
+            <div id="recent-videos" class="grid md:grid-cols-3 gap-6">
                 <!-- Placeholder for videos -->
                 <div class="bg-black/20 rounded-xl p-4 text-center">
                     <div class="h-32 bg-gray-800 rounded-lg mb-2"></div>
@@ -53,6 +56,58 @@
         </div>
     </div>
 
+    <!-- Video Creation Modal -->
+    <div id="video-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm overflow-y-auto h-full w-full flex items-center justify-center z-50">
+        <div class="bg-white/10 backdrop-blur-lg border border-white/20 p-8 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 text-white">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold">Create New AI Video</h3>
+                <button onclick="hideVideoModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <form onsubmit="createVideo(event)" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Video Prompt</label>
+                    <textarea id="ai_prompt" placeholder="Describe your video concept..." class="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500" rows="3" required></textarea>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">Number of Images</label>
+                        <input type="number" id="num_images" value="8" min="4" max="20" class="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">Seconds per Image</label>
+                        <input type="number" id="seconds_per_image" value="4" min="2" max="10" step="0.5" class="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">Music Genre</label>
+                        <select id="music_genre" class="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="electronic">Electronic</option>
+                            <option value="cinematic">Cinematic</option>
+                            <option value="ambient">Ambient</option>
+                            <option value="rock">Rock</option>
+                            <option value="pop">Pop</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">Image Style</label>
+                        <select id="image_style" class="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="Studio Fashion Photography">Studio Fashion Photography</option>
+                            <option value="Cinematic">Cinematic</option>
+                            <option value="Anime">Anime</option>
+                            <option value="Digital Art">Digital Art</option>
+                            <option value="Photorealistic">Photorealistic</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" onclick="hideVideoModal()" class="px-6 py-3 text-gray-300 hover:text-white transition-colors">Cancel</button>
+                    <button type="submit" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors">Create Video</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function logout() {
             localStorage.removeItem('token');
@@ -60,14 +115,86 @@
         }
 
         function upgrade() {
-            // Implement upgrade logic
             alert('Upgrade functionality coming soon!');
         }
 
-        function createVideo() {
-            // Implement video creation logic
-            alert('Video creation functionality coming soon!');
+        function showVideoModal() {
+            document.getElementById('video-modal').classList.remove('hidden');
         }
+
+        function hideVideoModal() {
+            document.getElementById('video-modal').classList.add('hidden');
+        }
+
+        async function createVideo(event) {
+            event.preventDefault();
+            
+            const formData = {
+                ai_prompt: document.getElementById('ai_prompt').value,
+                images: [], // Will be generated from prompt
+                music_genre: document.getElementById('music_genre').value,
+                music_mood: "energetic",
+                music_bpm: "medium",
+                image_style: document.getElementById('image_style').value,
+                seconds_per_image: parseFloat(document.getElementById('seconds_per_image').value),
+                enhance_prompts: true,
+                uploaded_audio: false
+            };
+
+            // Calculate number of images from prompt
+            const numImages = parseInt(document.getElementById('num_images').value);
+            for (let i = 0; i < numImages; i++) {
+                formData.images.push(formData.ai_prompt);
+            }
+
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/create-video', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to start video creation');
+                }
+
+                const data = await response.json();
+                alert(`Video creation started! Job ID: ${data.job_id}`);
+                hideVideoModal();
+                
+                // Optionally refresh credits
+                await updateCredits();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function updateCredits() {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/user/credits', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('video-credits').textContent = `Credits: ${data.video_credits}`;
+                }
+            } catch (error) {
+                console.error('Failed to update credits:', error);
+            }
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCredits();
+        });
     </script>
 </body>
 </html>
