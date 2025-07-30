@@ -147,6 +147,9 @@
                 <div>
                     <label class="block text-white text-sm font-medium mb-2">Password</label>
                     <input type="password" id="loginPassword" required class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Your password">
+                    <div class="text-right mt-1">
+                        <button type="button" onclick="showForgotPassword()" class="text-sm text-blue-400 hover:text-blue-300">Forgot Password?</button>
+                    </div>
                 </div>
                 
                 <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 rounded-lg font-semibold transition-colors">
@@ -168,6 +171,72 @@
         </div>
     </div>
 
+    <!-- Forgot Password Modal -->
+    <div id="forgotPasswordModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 max-w-md w-full mx-4">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-white mb-2">Reset Your Password</h2>
+                <p class="text-gray-300">Enter your email to receive a password reset link</p>
+            </div>
+            
+            <form id="forgotPasswordForm" class="space-y-4">
+                <div>
+                    <label class="block text-white text-sm font-medium mb-2">Email</label>
+                    <input type="email" id="forgotPasswordEmail" required class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="your@email.com">
+                </div>
+                
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 rounded-lg font-semibold transition-colors">
+                    Send Reset Link
+                </button>
+            </form>
+            
+            <div class="text-center mt-6">
+                <p class="text-gray-300">
+                    <button onclick="showLogin()" class="text-blue-400 hover:text-blue-300">Back to Login</button>
+                </p>
+            </div>
+            
+            <button onclick="hideModals()" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Reset Password Modal -->
+    <div id="resetPasswordModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 max-w-md w-full mx-4">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-white mb-2">Create New Password</h2>
+                <p class="text-gray-300">Enter your new password below</p>
+            </div>
+            
+            <form id="resetPasswordForm" class="space-y-4">
+                <input type="hidden" id="resetToken">
+                <div>
+                    <label class="block text-white text-sm font-medium mb-2">New Password</label>
+                    <input type="password" id="newPassword" required class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter new password">
+                </div>
+                
+                <div>
+                    <label class="block text-white text-sm font-medium mb-2">Confirm Password</label>
+                    <input type="password" id="confirmPassword" required class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Confirm new password">
+                </div>
+                
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 rounded-lg font-semibold transition-colors">
+                    Reset Password
+                </button>
+            </form>
+            
+            <button onclick="hideModals()" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+    
     <!-- Register Modal -->
     <div id="registerModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
         <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 max-w-md w-full mx-4">
@@ -228,6 +297,18 @@
         function hideModals() {
             document.getElementById('loginModal').classList.add('hidden');
             document.getElementById('registerModal').classList.add('hidden');
+            document.getElementById('forgotPasswordModal').classList.add('hidden');
+            document.getElementById('resetPasswordModal').classList.add('hidden');
+        }
+        
+        function showForgotPassword() {
+            hideModals();
+            document.getElementById('forgotPasswordModal').classList.remove('hidden');
+        }
+        
+        function showResetPassword() {
+            hideModals();
+            document.getElementById('resetPasswordModal').classList.remove('hidden');
         }
         
         function scrollToFeatures() {
@@ -333,12 +414,85 @@
             await handleRegister(name, email, password);
         });
         
+        // Handle forgot password form submission
+        document.getElementById('forgotPasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('forgotPasswordEmail').value;
+            try {
+                const response = await fetch('/api/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                if (response.ok) {
+                    alert('Password reset link has been sent to your email.');
+                    hideModals();
+                } else {
+                    const error = await response.json();
+                    alert(error.detail || 'Failed to send reset link. Please try again.');
+                }
+            } catch (error) {
+                alert('An error occurred. Please try again.');
+            }
+        });
+        
+        // Handle reset password form submission
+        document.getElementById('resetPasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const token = document.getElementById('resetToken').value;
+            
+            if (newPassword !== confirmPassword) {
+                alert('Passwords do not match!');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, new_password: newPassword })
+                });
+                
+                if (response.ok) {
+                    alert('Password has been reset successfully. Please login with your new password.');
+                    showLogin();
+                } else {
+                    const error = await response.json();
+                    alert(error.detail || 'Failed to reset password. Please try again.');
+                }
+            } catch (error) {
+                alert('An error occurred. Please try again.');
+            }
+        });
+        
+        // Check for reset token in URL
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const resetToken = urlParams.get('token');
+            
+            if (resetToken) {
+                document.getElementById('resetToken').value = resetToken;
+                showResetPassword();
+            }
+        });
+        
         // Close modals on outside click
         document.getElementById('loginModal').addEventListener('click', (e) => {
             if (e.target === e.currentTarget) hideModals();
         });
         
         document.getElementById('registerModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) hideModals();
+        });
+        
+        document.getElementById('forgotPasswordModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) hideModals();
+        });
+        
+        document.getElementById('resetPasswordModal').addEventListener('click', (e) => {
             if (e.target === e.currentTarget) hideModals();
         });
     </script>

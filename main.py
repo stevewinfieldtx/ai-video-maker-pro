@@ -250,6 +250,24 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm="HS256")
     return encoded_jwt
 
+def create_password_reset_token(email: str):
+    to_encode = {"email": email, "purpose": "password_reset"}
+    expire = datetime.utcnow() + timedelta(hours=1)  # Reset token valid for 1 hour
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm="HS256")
+    return encoded_jwt
+
+def verify_password_reset_token(token: str):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        if payload.get("purpose") != "password_reset":
+            return None
+        return payload.get("email")
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.JWTError:
+        return None
+
 def get_current_user(request: Request):
     token = request.cookies.get("access_token")
     if not token:
@@ -831,6 +849,85 @@ async def login(request: Request):
 @app.post("/api/logout")
 async def logout():
     response = JSONResponse({"message": "Logged out successfully"})
+    response.delete_cookie("access_token")
+    return response
+
+@app.post("/api/forgot-password")
+async def forgot_password(request: Request):
+    try:
+        data = await request.json()
+        email = data.get("email")
+        
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+        
+        # Check if user exists
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.email == email).first()
+            if not user:
+                # Don't reveal that the user doesn't exist for security reasons
+                return {"message": "If your email is registered, you will receive a password reset link"}
+            
+            # Create password reset token
+            reset_token = create_password_reset_token(email)
+            
+            # In a real application, you would send an email with the reset link
+            # For this demo, we'll just return the token
+            reset_link = f"http://localhost:8000/?token={reset_token}"
+            
+            print(f"Password reset link for {email}: {reset_link}")
+            
+            # In a real application, you would use an email service like SendGrid, Mailgun, etc.
+            # Example code for sending email (commented out):
+            # await send_email(
+            #     to_email=email,
+            #     subject="Password Reset Request",
+            #     content=f"Click the link below to reset your password:\n{reset_link}"
+            # )
+            
+            return {"message": "If your email is registered, you will receive a password reset link"}
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Password reset request error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/api/reset-password")
+async def reset_password(request: Request):
+    try:
+        data = await request.json()
+        token = data.get("token")
+        new_password = data.get("new_password")
+        
+        if not token or not new_password:
+            raise HTTPException(status_code=400, detail="Token and new password are required")
+        
+        # Verify token and get email
+        email = verify_password_reset_token(token)
+        if not email:
+            raise HTTPException(status_code=400, detail="Invalid or expired token")
+        
+        # Update user password
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.email == email).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Hash and update password
+            hashed_password = get_password_hash(new_password)
+            user.hashed_password = hashed_password
+            db.commit()
+            
+            return {"message": "Password has been reset successfully"}
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Password reset error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/create_video")
 async def create_video(request: Request, current_user: dict = Depends(get_current_user)):
