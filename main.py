@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # main.py - Complete AI Video Maker with PayPal Integration (NO STRIPE!)
 from fastapi import FastAPI, HTTPException, Request, Depends, Form, File, UploadFile
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
