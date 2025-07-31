@@ -10,6 +10,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 import base64
 import uuid
 import asyncio
@@ -177,6 +181,9 @@ jobs = {}
 async def get_paypal_access_token():
     """Get PayPal access token for API calls"""
     try:
+        if not PAYPAL_CLIENT_ID or not PAYPAL_CLIENT_SECRET:
+            raise Exception("PayPal credentials not configured")
+            
         auth = base64.b64encode(f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode()).decode()
         
         headers = {
@@ -187,7 +194,89 @@ async def get_paypal_access_token():
         }
         
         data = "grant_type=client_credentials"
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{PAYPAL_BASE_URL}/v1/oauth2/token", headers=headers, data=data) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result["access_token"]
+                else:
+                    raise Exception(f"PayPal auth failed: {response.status}")
+    except Exception as e:
+        print(f"💥 PayPal auth error: {e}")
+        raise
 
+async def create_paypal_payment(amount: float, currency: str = "USD"):
+    """Create PayPal payment"""
+    try:
+        access_token = await get_paypal_access_token()
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        
+        payment_data = {
+            "intent": "sale",
+            "payer": {
+                "payment_method": "paypal"
+            },
+            "transactions": [{
+                "amount": {
+                    "total": str(amount),
+                    "currency": currency
+                },
+                "description": "AI Video Maker Pro - Video Credits"
+            }],
+            "redirect_urls": {
+                "return_url": "http://localhost:8000/payment/success",
+                "cancel_url": "http://localhost:8000/payment/cancel"
+            }
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{PAYPAL_BASE_URL}/v1/payments/payment", headers=headers, json=payment_data) as response:
+                if response.status == 201:
+                    return await response.json()
+                else:
+                    raise Exception(f"PayPal payment creation failed: {response.status}")
+    except Exception as e:
+        print(f"💥 PayPal payment creation error: {e}")
+        raise
+
+async def execute_paypal_payment(payment_id: str, payer_id: str):
+    """Execute PayPal payment"""
+    try:
+        access_token = await get_paypal_access_token()
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        
+        execute_data = {
+            "payer_id": payer_id
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{PAYPAL_BASE_URL}/v1/payments/payment/{payment_id}/execute", headers=headers, json=execute_data) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    raise Exception(f"PayPal payment execution failed: {response.status}")
+    except Exception as e:
+        print(f"💥 PayPal payment execution error: {e}")
+        raise
+
+# Audio Processing Functions
+async def process_uploaded_audio(audio_file: UploadFile, job_dir: Path) -> str:
+    """Process uploaded audio file"""
+    try:
+        # Save original file
+        original_audio_path = job_dir / f"original_{audio_file.filename}"
+        with open(original_audio_path, "wb") as f:
+            content = await audio_file.read()
+            f.write(content)
         
         print(f"📁 Saved original audio: {original_audio_path}")
         
@@ -1092,6 +1181,98 @@ async def serve_video(filename: str, current_user: dict = Depends(get_current_us
 async def get_user_credits(current_user: dict = Depends(get_current_user)):
     """Get current user's video credits"""
     return {"video_credits": current_user['video_credits']}
+
+# PayPal Payment Endpoints
+@app.post("/api/create-payment")
+async def create_payment(current_user: dict = Depends(get_current_user)):
+    """Create PayPal payment for video credits"""
+    try:
+        if not PAYPAL_CLIENT_ID or not PAYPAL_CLIENT_SECRET:
+            raise HTTPException(status_code=503, detail="Payment system not configured")
+        
+        # Create payment for $1 = 2 video credits
+        payment = await create_paypal_payment(1.00, "USD")
+        
+        # Find approval URL
+        approval_url = None
+        for link in payment.get("links", []):
+            if link.get("rel") == "approval_url":
+                approval_url = link.get("href")
+                break
+        
+        if not approval_url:
+            raise HTTPException(status_code=500, detail="Payment creation failed")
+        
+        return {
+            "payment_id": payment["id"],
+            "approval_url": approval_url,
+            "amount": "1.00",
+            "currency": "USD",
+            "credits": 2
+        }
+    except Exception as e:
+        print(f"💥 Payment creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Payment creation failed: {str(e)}")
+
+@app.get("/payment/success")
+async def payment_success(request: Request, paymentId: str, PayerID: str):
+    """Handle successful PayPal payment"""
+    try:
+        # Execute the payment
+        result = await execute_paypal_payment(paymentId, PayerID)
+        
+        if result.get("state") == "approved":
+            # Get user from payment (you might want to store user_id with payment)
+            # For now, we'll redirect to dashboard with success message
+            return RedirectResponse(url="/?payment=success", status_code=302)
+        else:
+            return RedirectResponse(url="/?payment=failed", status_code=302)
+    except Exception as e:
+        print(f"💥 Payment execution failed: {e}")
+        return RedirectResponse(url="/?payment=error", status_code=302)
+
+@app.get("/payment/cancel")
+async def payment_cancel(request: Request):
+    """Handle cancelled PayPal payment"""
+    return RedirectResponse(url="/?payment=cancelled", status_code=302)
+
+@app.post("/api/execute-payment")
+async def execute_payment_api(request: Request, current_user: dict = Depends(get_current_user)):
+    """Execute PayPal payment and add credits to user"""
+    try:
+        data = await request.json()
+        payment_id = data.get("payment_id")
+        payer_id = data.get("payer_id")
+        
+        if not payment_id or not payer_id:
+            raise HTTPException(status_code=400, detail="Missing payment_id or payer_id")
+        
+        # Execute the payment
+        result = await execute_paypal_payment(payment_id, payer_id)
+        
+        if result.get("state") == "approved":
+            # Add credits to user
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == current_user['id']).first()
+                if user:
+                    user.video_credits += 2  # $1 = 2 credits
+                    db.commit()
+                    
+                    return {
+                        "success": True,
+                        "message": "Payment successful! 2 video credits added.",
+                        "new_credits": user.video_credits
+                    }
+                else:
+                    raise HTTPException(status_code=404, detail="User not found")
+            finally:
+                db.close()
+        else:
+            raise HTTPException(status_code=400, detail="Payment not approved")
+    except Exception as e:
+        print(f"💥 Payment execution failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Payment execution failed: {str(e)}")
 
 # Health check endpoint
 @app.get("/health")

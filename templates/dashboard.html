@@ -126,8 +126,37 @@
             window.location.href = '/';
         }
 
-        function upgrade() {
-            alert('Upgrade functionality coming soon!');
+        async function upgrade() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    alert('Please log in first');
+                    return;
+                }
+                
+                // Create PayPal payment
+                const response = await fetch('/api/create-payment', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Payment creation failed');
+                }
+                
+                const paymentData = await response.json();
+                
+                // Redirect to PayPal for payment approval
+                window.location.href = paymentData.approval_url;
+                
+            } catch (error) {
+                alert(`Payment Error: ${error.message}`);
+                console.error('Payment creation failed:', error);
+            }
         }
 
         function showVideoModal() {
@@ -207,9 +236,32 @@
             }
         }
 
+        // Handle payment success/failure from URL parameters
+        function handlePaymentCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const payment = urlParams.get('payment');
+            
+            if (payment === 'success') {
+                alert('Payment successful! Your credits have been updated.');
+                updateCredits();
+                // Clean URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (payment === 'failed') {
+                alert('Payment failed. Please try again.');
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (payment === 'cancelled') {
+                alert('Payment was cancelled.');
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (payment === 'error') {
+                alert('Payment error occurred. Please try again.');
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             updateCredits();
+            handlePaymentCallback();
         });
     </script>
 </body>
