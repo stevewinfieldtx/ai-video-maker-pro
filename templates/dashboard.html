@@ -161,13 +161,17 @@
 
             try {
                 const token = localStorage.getItem('token');
+                
+                // Create FormData for the request
+                const form = new FormData();
+                form.append('video_request', JSON.stringify(formData));
+                
                 const response = await fetch('/api/create-video', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify(formData)
+                    body: form
                 });
 
                 if (!response.ok) {
