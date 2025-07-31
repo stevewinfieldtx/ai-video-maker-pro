@@ -18,6 +18,7 @@ import base64
 import uuid
 import asyncio
 import aiohttp
+import time
 from pathlib import Path
 import shutil
 import random
@@ -207,45 +208,47 @@ async def get_paypal_access_token():
         raise
 
 async def create_paypal_payment(amount: float, currency: str = "USD"):
-    """Create PayPal payment"""
+    """Create PayPal order using v2 API"""
     try:
         access_token = await get_paypal_access_token()
         
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {access_token}"
+            "Authorization": f"Bearer {access_token}",
+            "PayPal-Request-Id": f"order-{int(time.time())}"
         }
         
-        payment_data = {
-            "intent": "sale",
-            "payer": {
-                "payment_method": "paypal"
-            },
-            "transactions": [{
+        order_data = {
+            "intent": "CAPTURE",
+            "purchase_units": [{
                 "amount": {
-                    "total": str(amount),
-                    "currency": currency
+                    "currency_code": currency,
+                    "value": str(amount)
                 },
                 "description": "AI Video Maker Pro - Video Credits"
             }],
-            "redirect_urls": {
+            "application_context": {
                 "return_url": "http://localhost:8000/payment/success",
-                "cancel_url": "http://localhost:8000/payment/cancel"
+                "cancel_url": "http://localhost:8000/payment/cancel",
+                "brand_name": "AI Video Maker Pro",
+                "landing_page": "BILLING",
+                "user_action": "PAY_NOW"
             }
         }
         
         async with aiohttp.ClientSession() as session:
-            async with session.post(f"{PAYPAL_BASE_URL}/v1/payments/payment", headers=headers, json=payment_data) as response:
+            async with session.post(f"{PAYPAL_BASE_URL}/v2/checkout/orders", headers=headers, json=order_data) as response:
                 if response.status == 201:
                     return await response.json()
                 else:
-                    raise Exception(f"PayPal payment creation failed: {response.status}")
+                    error_text = await response.text()
+                    raise Exception(f"PayPal order creation failed: {response.status} - {error_text}")
     except Exception as e:
         print(f"💥 PayPal payment creation error: {e}")
         raise
 
-async def execute_paypal_payment(payment_id: str, payer_id: str):
-    """Execute PayPal payment"""
+async def capture_paypal_order(order_id: str):
+    """Capture PayPal order using v2 API"""
     try:
         access_token = await get_paypal_access_token()
         
@@ -254,18 +257,15 @@ async def execute_paypal_payment(payment_id: str, payer_id: str):
             "Authorization": f"Bearer {access_token}"
         }
         
-        execute_data = {
-            "payer_id": payer_id
-        }
-        
         async with aiohttp.ClientSession() as session:
-            async with session.post(f"{PAYPAL_BASE_URL}/v1/payments/payment/{payment_id}/execute", headers=headers, json=execute_data) as response:
-                if response.status == 200:
+            async with session.post(f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}/capture", headers=headers) as response:
+                if response.status == 201:
                     return await response.json()
                 else:
-                    raise Exception(f"PayPal payment execution failed: {response.status}")
+                    error_text = await response.text()
+                    raise Exception(f"PayPal order capture failed: {response.status} - {error_text}")
     except Exception as e:
-        print(f"💥 PayPal payment execution error: {e}")
+        print(f"💥 PayPal order capture error: {e}")
         raise
 
 # Audio Processing Functions
@@ -1190,21 +1190,21 @@ async def create_payment(current_user: dict = Depends(get_current_user)):
         if not PAYPAL_CLIENT_ID or not PAYPAL_CLIENT_SECRET:
             raise HTTPException(status_code=503, detail="Payment system not configured")
         
-        # Create payment for $1 = 2 video credits
-        payment = await create_paypal_payment(1.00, "USD")
+        # Create order for $1 = 2 video credits
+        order = await create_paypal_payment(1.00, "USD")
         
         # Find approval URL
         approval_url = None
-        for link in payment.get("links", []):
-            if link.get("rel") == "approval_url":
+        for link in order.get("links", []):
+            if link.get("rel") == "approve":
                 approval_url = link.get("href")
                 break
         
         if not approval_url:
-            raise HTTPException(status_code=500, detail="Payment creation failed")
+            raise HTTPException(status_code=500, detail="Order creation failed")
         
         return {
-            "payment_id": payment["id"],
+            "order_id": order["id"],
             "approval_url": approval_url,
             "amount": "1.00",
             "currency": "USD",
@@ -1215,13 +1215,13 @@ async def create_payment(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Payment creation failed: {str(e)}")
 
 @app.get("/payment/success")
-async def payment_success(request: Request, paymentId: str, PayerID: str):
-    """Handle successful PayPal payment"""
+async def payment_success(request: Request, token: str):
+    """Handle successful PayPal order"""
     try:
-        # Execute the payment
-        result = await execute_paypal_payment(paymentId, PayerID)
+        # Capture the order (token is the order_id)
+        result = await capture_paypal_order(token)
         
-        if result.get("state") == "approved":
+        if result.get("status") == "COMPLETED":
             # Get user from payment (you might want to store user_id with payment)
             # For now, we'll redirect to dashboard with success message
             return RedirectResponse(url="/?payment=success", status_code=302)
@@ -1238,19 +1238,18 @@ async def payment_cancel(request: Request):
 
 @app.post("/api/execute-payment")
 async def execute_payment_api(request: Request, current_user: dict = Depends(get_current_user)):
-    """Execute PayPal payment and add credits to user"""
+    """Capture PayPal order and add credits to user"""
     try:
         data = await request.json()
-        payment_id = data.get("payment_id")
-        payer_id = data.get("payer_id")
+        order_id = data.get("order_id")
         
-        if not payment_id or not payer_id:
-            raise HTTPException(status_code=400, detail="Missing payment_id or payer_id")
+        if not order_id:
+            raise HTTPException(status_code=400, detail="Missing order_id")
         
-        # Execute the payment
-        result = await execute_paypal_payment(payment_id, payer_id)
+        # Capture the order
+        result = await capture_paypal_order(order_id)
         
-        if result.get("state") == "approved":
+        if result.get("status") == "COMPLETED":
             # Add credits to user
             db = SessionLocal()
             try:

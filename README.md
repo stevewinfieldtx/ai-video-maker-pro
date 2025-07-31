@@ -9,8 +9,8 @@ The PayPal payment integration was completely broken in the original code. Here'
 1. **Fixed Broken PayPal Function**: The `get_paypal_access_token()` function was corrupted and mixed with audio processing code
 2. **Added Complete PayPal Integration**:
    - `get_paypal_access_token()` - Authenticates with PayPal API
-   - `create_paypal_payment()` - Creates payment requests
-   - `execute_paypal_payment()` - Processes completed payments
+   - `create_paypal_payment()` - Creates PayPal orders using v2 API
+- `capture_paypal_order()` - Captures completed orders using v2 API
 
 3. **Added Missing Payment Endpoints**:
    - `POST /api/create-payment` - Creates PayPal payment ($1 = 2 credits)
